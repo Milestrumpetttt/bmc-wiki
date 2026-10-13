@@ -112,8 +112,28 @@ function applyTheme(){document.documentElement.dataset.mode=themeSettings.mode;d
 applyTheme();
 function themePage(){page('Appearance',`<p class="muted">Your display preferences are saved on this device.</p><div class="settingGrid"><label>Theme<select id="modeSelect"><option value="light">Light</option><option value="dark">Dark</option></select></label><label>Accent color<select id="accentSelect"><option value="default">Default</option><option value="blue">Blue</option><option value="red">Red</option><option value="green">Green</option><option value="purple">Purple</option><option value="orange">Orange</option></select></label><label>Style<select id="shapeSelect"><option value="classic">Original — classic BMC Wiki</option><option value="sleek">Sleek — rounded</option><option value="rigid">Rigid — square</option></select></label></div>`);for(const [id,key] of [['modeSelect','mode'],['accentSelect','accent'],['shapeSelect','shape']]){const el=$('#'+id);el.value=themeSettings[key];el.onchange=()=>{themeSettings[key]=el.value;applyTheme()}}}
 function mediaMarkup(images){return Array.isArray(images)&&images.length?`<div class="post-images">${images.map(u=>`<a href="${esc(u)}" target="_blank" rel="noopener noreferrer"><img src="${esc(u)}" alt="Post attachment" loading="lazy"></a>`).join('')}</div>`:''}
-function mediaPicker(id='postImage'){return `<label for="${id}">Attach images (PNG, JPG, WebP, GIF, up to 3 MB each)</label><input id="${id}" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple><p class="muted">You can also paste an image URL below.</p><input id="${id}Url" type="url" placeholder="https://example.com/image.png (optional)">`}
-async function uploadImage(file,scope,post_type){if(file.size>3000000)throw Error('Image must be under 3 MB');const data=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=()=>reject(Error('Cannot read image'));reader.readAsDataURL(file)});const r=await api('upload',{scope,post_type,mime:file.type,data});return r.url}
+function mediaPicker(id='postImage'){return `<label for="${id}">Attach images (PNG, JPG, WebP, GIF, up to 10 MB each)</label><input id="${id}" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple><p class="muted">You can also paste an image URL below.</p><input id="${id}Url" type="url" placeholder="https://example.com/image.png (optional)">`}
+async function compressLargeImage(file){
+  if(file.size<=10000000)return file;
+  if(!['image/jpeg','image/png','image/webp'].includes(file.type))throw Error('This image exceeds 10 MB and cannot be compressed automatically');
+  const bitmap=await createImageBitmap(file);
+  let scale=Math.min(1,2400/Math.max(bitmap.width,bitmap.height));
+  for(let attempt=0;attempt<7;attempt++){
+    const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));
+    const ctx=canvas.getContext('2d');if(!ctx)throw Error('Cannot compress image');ctx.drawImage(bitmap,0,0,canvas.width,canvas.height);
+    const quality=Math.max(.42,.86-attempt*.07);
+    const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/webp',quality));
+    if(blob&&blob.size<=10000000){bitmap.close();return new File([blob],file.name.replace(/\.[^.]+$/,'.webp'),{type:'image/webp'});}
+    scale*=.75;
+  }
+  bitmap.close();throw Error('Image is too large to compress under 10 MB');
+}
+async function uploadImage(file,scope,post_type){
+  file=await compressLargeImage(file);
+  if(file.size>10000000)throw Error('Image must be under 10 MB');
+  const data=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=()=>reject(Error('Cannot read image'));reader.readAsDataURL(file)});
+  const r=await api('upload',{scope,post_type,mime:file.type,data});return r.url;
+}
 async function collectImages(id,scope,post_type,old=[]){const el=$('#'+id);const images=[...(Array.isArray(old)?old:[])];for(const file of Array.from(el?.files||[]).slice(0,8-images.length))images.push(await uploadImage(file,scope,post_type));const url=$('#'+id+'Url')?.value.trim();if(url)images.push(url);return images.slice(0,8)}
 
 const forumTypes=[['transit','Transit','Transit systems, routes, stations, and transport projects'],['simsport','Simsport','Sports leagues, stadiums, events, and teams'],['company','Company','Businesses, companies, and services'],['simpolitics','Simpolitics','Governments, policies, and elections'],['weather','Weather','Forecasts, storms, and weather reports']];
