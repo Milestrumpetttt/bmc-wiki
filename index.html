@@ -452,11 +452,34 @@ document.addEventListener('keydown',e=>{
 async function bmcExportPNG(){
  if(!bmcMap)return notice('Open a map first.');
  const mode=document.getElementById('bmcPNGImagery')?.value||'normal';
- const W=2400,H=2400,scale=W/100;
+ const W=2400,H=2400;
+ // Fit the visible map artwork for blank exports, instead of leaving it in a tiny corner.
+ const coords=[];
+ if(mode==='blank'){
+  if(bmcVisibility.towns)for(const t of bmcMap.towns||[]){for(const pt of t.points||[{x:t.x,y:t.y},{x:t.x+t.w,y:t.y+t.h}])coords.push(pt);}
+  if(bmcVisibility.roads)for(const r of bmcMap.roads||[])coords.push(...(r.points||[]));
+  for(const m of bmcMap.markers||[])if(m.src?bmcVisibility.signs:bmcVisibility.markers)coords.push({x:m.x,y:m.y});
+ }
+ const valid=coords.filter(p=>Number.isFinite(+p.x)&&Number.isFinite(+p.y));
+ let minX=0,minY=0,maxX=100,maxY=100;
+ if(mode==='blank'&&valid.length){minX=Math.min(...valid.map(p=>+p.x));maxX=Math.max(...valid.map(p=>+p.x));minY=Math.min(...valid.map(p=>+p.y));maxY=Math.max(...valid.map(p=>+p.y));const pad=Math.max(2,(maxX-minX)*.07,(maxY-minY)*.07);minX-=pad;maxX+=pad;minY-=pad;maxY+=pad;}
+ const scale=Math.min(W/Math.max(1,maxX-minX),H/Math.max(1,maxY-minY));
+ const offsetX=(W-(maxX-minX)*scale)/2-minX*scale,offsetY=(H-(maxY-minY)*scale)/2-minY*scale;
  const canvas=document.createElement('canvas');canvas.width=W;canvas.height=H;
  const ctx=canvas.getContext('2d');ctx.clearRect(0,0,W,H);
- const load=src=>new Promise(resolve=>{const im=new Image();im.onload=()=>resolve(im);im.onerror=()=>resolve(null);im.src=src;});
+ let skippedImages=0;
+ const load=src=>new Promise(resolve=>{
+  const im=new Image();
+  // Anonymous CORS is essential: otherwise one remote image taints the entire PNG.
+  if(/^https?:/i.test(src))im.crossOrigin='anonymous';
+  im.onload=()=>{
+   try{const test=document.createElement('canvas');test.width=test.height=1;const tc=test.getContext('2d');tc.drawImage(im,0,0,1,1);tc.getImageData(0,0,1,1);resolve(im);}
+   catch(e){skippedImages++;resolve(null);}
+  };
+  im.onerror=()=>{skippedImages++;resolve(null);};im.src=src;
+ });
  try{
+  ctx.translate(offsetX,offsetY);
   if(mode!=='blank')for(const l of bmcMap.layers||[]){
    if(l.visible===false||!l.src)continue;
    const im=await load(l.src);if(!im)continue;
@@ -488,7 +511,8 @@ async function bmcExportPNG(){
   for(const m of bmcMap.markers||[]){if(m.src?!bmcVisibility.signs:!bmcVisibility.markers)continue;
    const x=m.x*scale,y=m.y*scale;if(m.src){const im=await load(m.src);if(im)ctx.drawImage(im,x-1.5*scale,y-1.5*scale,3*scale,3*scale);}else{ctx.font=`${3*scale}px sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(m.emoji||'📍',x,y);}
   }
-  canvas.toBlob(blob=>{if(!blob)return notice('Could not generate PNG.');const u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=(bmcMap.title||'bmc-map').replace(/[^a-z0-9-]/gi,'-')+'-'+mode+'.png';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),15000);notice('Transparent PNG exported.');},'image/png');
+  ctx.setTransform(1,0,0,1,0,0);
+  canvas.toBlob(blob=>{if(!blob)return notice('Could not generate PNG.');const u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=(bmcMap.title||'bmc-map').replace(/[^a-z0-9-]/gi,'-')+'-'+mode+'.png';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),15000);notice('Transparent PNG exported.'+(skippedImages?' '+skippedImages+' remote image(s) were skipped because their hosts block export.':''));},'image/png');
  }catch(e){console.error('PNG export failed',e);notice('PNG export failed: '+e.message);}
 }
 
