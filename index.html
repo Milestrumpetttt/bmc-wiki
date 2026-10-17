@@ -453,16 +453,29 @@ async function bmcExportPNG(){
  if(!bmcMap)return notice('Open a map first.');
  const mode=document.getElementById('bmcPNGImagery')?.value||'normal';
  const W=2400,H=2400;
- // Fit the visible map artwork for blank exports, instead of leaving it in a tiny corner.
+ // Fit the full visible artwork in every imagery mode. Earlier versions only
+ // calculated bounds in Blank mode, clipping Original and Grey to 0..100.
  const coords=[];
- if(mode==='blank'){
-  if(bmcVisibility.towns)for(const t of bmcMap.towns||[]){for(const pt of t.points||[{x:t.x,y:t.y},{x:t.x+t.w,y:t.y+t.h}])coords.push(pt);}
-  if(bmcVisibility.roads)for(const r of bmcMap.roads||[])coords.push(...(r.points||[]));
-  for(const m of bmcMap.markers||[])if(m.src?bmcVisibility.signs:bmcVisibility.markers)coords.push({x:m.x,y:m.y});
+ if(bmcVisibility.towns)for(const t of bmcMap.towns||[]){
+  for(const pt of t.points||[{x:t.x,y:t.y},{x:(+t.x||0)+(+t.w||0),y:(+t.y||0)+(+t.h||0)}])coords.push(pt);
+ }
+ if(bmcVisibility.roads)for(const r of bmcMap.roads||[])coords.push(...(r.points||[]));
+ for(const m of bmcMap.markers||[])if(m.src?bmcVisibility.signs:bmcVisibility.markers)coords.push({x:m.x,y:m.y});
+ // Original and Grey additionally include the complete bounds of visible imagery.
+ if(mode!=='blank')for(const l of bmcMap.layers||[]){
+  if(l.visible===false||!l.src)continue;
+  const x=+l.x||0,y=+l.y||0,w=+l.w||0,h=+l.h||0;
+  const angle=(+l.angle||0)*Math.PI/180,c=Math.cos(angle),si=Math.sin(angle);
+  for(const dx of [-w/2,w/2])for(const dy of [-h/2,h/2])coords.push({x:x+w/2+dx*c-dy*si,y:y+h/2+dx*si+dy*c});
  }
  const valid=coords.filter(p=>Number.isFinite(+p.x)&&Number.isFinite(+p.y));
  let minX=0,minY=0,maxX=100,maxY=100;
- if(mode==='blank'&&valid.length){minX=Math.min(...valid.map(p=>+p.x));maxX=Math.max(...valid.map(p=>+p.x));minY=Math.min(...valid.map(p=>+p.y));maxY=Math.max(...valid.map(p=>+p.y));const pad=Math.max(2,(maxX-minX)*.07,(maxY-minY)*.07);minX-=pad;maxX+=pad;minY-=pad;maxY+=pad;}
+ if(valid.length){
+  minX=Math.min(...valid.map(p=>+p.x));maxX=Math.max(...valid.map(p=>+p.x));
+  minY=Math.min(...valid.map(p=>+p.y));maxY=Math.max(...valid.map(p=>+p.y));
+  const pad=Math.max(2,(maxX-minX)*.04,(maxY-minY)*.04);
+  minX-=pad;maxX+=pad;minY-=pad;maxY+=pad;
+ }
  const scale=Math.min(W/Math.max(1,maxX-minX),H/Math.max(1,maxY-minY));
  const offsetX=(W-(maxX-minX)*scale)/2-minX*scale,offsetY=(H-(maxY-minY)*scale)/2-minY*scale;
  const canvas=document.createElement('canvas');canvas.width=W;canvas.height=H;
