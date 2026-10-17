@@ -354,7 +354,7 @@ async function bmcMapsPage(id){
  }
  bmcMap.towns ||= [];bmcMap.markers ||= [];bmcMap.roads ||= [];bmcMap.layers ||= [];
  bmcTool='road';bmcZoom=1;bmcPan={x:0,y:0};bmcRoadDraft=[];bmcTownDraft=[];bmcSelectedLayer=-1;bmcView=false;bmcUndoStack=[];bmcRedoStack=[];bmcPendingPoint=null;
- page('Map Builder',`<p class="muted">Draft edits save locally. Publish to share this map with everyone on BMC Wiki.</p><div class="bmc-map-header"><input aria-label="Map name" id="bmcMapTitle" value="${esc(bmcMap.title)}" oninput="bmcMap.title=this.value;bmcSave()"><div class="actions"><button onclick="location.hash='maps';bmcMapsPage()">← Maps</button><button onclick="bmcToggleView()" id="bmcViewButton">View mode</button><label class="bmc-publish-mode">Publishing permissions <select id="bmcEditingMode" onchange="bmcMap.editing_mode=this.value;bmcSave()"><option value="poster">Poster editing — only creator edits</option><option value="remix">Allow remixing — others can copy</option><option value="public">Public editing + remixing</option></select></label><button class="primary" onclick="bmcPublish()" id="bmcPublishButton">Publish map</button><button id="bmcRemixButton" hidden onclick="bmcRemix(bmcMap.id)">Remix this map</button><button onclick="bmcExport()">Export JSON</button></div></div>
+ page('Map Builder',`<p class="muted">Draft edits save locally. Publish to share this map with everyone on BMC Wiki.</p><div class="bmc-map-header"><input aria-label="Map name" id="bmcMapTitle" value="${esc(bmcMap.title)}" oninput="bmcMap.title=this.value;bmcSave()"><div class="actions"><button onclick="location.hash='maps';bmcMapsPage()">← Maps</button><button onclick="bmcToggleView()" id="bmcViewButton">View mode</button><label class="bmc-publish-mode">Publishing permissions <select id="bmcEditingMode" onchange="bmcMap.editing_mode=this.value;bmcSave()"><option value="poster">Poster editing — only creator edits</option><option value="remix">Allow remixing — others can copy</option><option value="public">Public editing + remixing</option></select></label><button class="primary" onclick="bmcPublish()" id="bmcPublishButton">Publish map</button><button id="bmcRemixButton" hidden onclick="bmcRemix(bmcMap.id)">Remix this map</button><button onclick="bmcExport()">Export JSON</button><button onclick="bmcExportPNG()">Export PNG</button><label style="display:inline-flex;align-items:center;gap:5px;margin:0">Imagery in PNG <select id="bmcPNGImagery" style="width:auto"><option value="normal">Original</option><option value="grey">Change imagery to grey</option><option value="blank">Blank / hide imagery</option></select></label></div></div>
  <div class="bmc-map-layout"><div class="bmc-map-main"><div id="bmcStage" class="bmc-map-stage" oncontextmenu="event.preventDefault()" onwheel="bmcWheel(event)" onpointerdown="bmcPointerDown(event)" onpointermove="bmcPointerMove(event)" onpointerup="bmcPointerUp(event)" onpointercancel="bmcPointerUp(event)"><div id="bmcWorld" class="bmc-map-world"></div><div id="bmcMarkerPopup" class="bmc-marker-popup" hidden></div></div><details class="bmc-map-key" open><summary>Map key & visible layers</summary><div class="bmc-map-key-controls"><label><input type="checkbox" checked onchange="bmcVisibility.towns=this.checked;bmcPaint()"> Towns / cities</label><label><input type="checkbox" checked onchange="bmcVisibility.roads=this.checked;bmcPaint()"> Roads</label><label><input type="checkbox" checked onchange="bmcVisibility.markers=this.checked;bmcPaint()"> Markers</label><label><input type="checkbox" checked onchange="bmcVisibility.signs=this.checked;bmcPaint()"> Signs</label></div><div id="bmcKeyEntries"></div></details><p class="bmc-map-help">Scroll wheel to zoom toward your cursor · Right-click and drag to pan · Left-click to draw · View mode to explore towns and signs.</p></div>
  <aside class="bmc-map-side" id="bmcSidebar"><div class="bmc-side-heading">Editor tools</div><div class="bmc-tools-grid"><button id="bmcTool-pan" onclick="bmcToolSet('road')">✋ Pan</button><button id="bmcTool-road" onclick="bmcToolSet('road')">🛣 Road</button><button id="bmcTool-town" onclick="bmcToolSet('town')">▣ Draw area</button><button id="bmcTool-marker" onclick="bmcToolSet('marker')">📍 Marker</button><button id="bmcTool-move" onclick="bmcToolSet('move')">↔ Move image</button><button id="bmcTool-resize" onclick="bmcToolSet('resize')">⤢ Resize image</button><button id="bmcTool-crop" onclick="bmcToolSet('crop')">✂ Crop image</button><button id="bmcTool-rotate" onclick="bmcToolSet('rotate')">⟳ Rotate image</button></div>
  <div class="bmc-editor-options"><div id="bmcRoadOptions"><label>Road type<select id="bmcRoadType" onchange="bmcRoadType=this.value;bmcPaint()"><option value="highway">Highway</option><option value="state">State road</option><option value="road">Road</option><option value="dirt">Dirt path</option></select></label><label>Road name (optional)<input id="bmcRoadName" placeholder="Leave blank for unnamed road" maxlength="120"></label><button onclick="bmcFinishRoad()">Finish road</button><button onclick="bmcRoadDraft=[];bmcPaint()">Cancel line</button></div><div id="bmcTownOptions" hidden><label>Area type<select id="bmcAreaType" onchange="bmcAreaTypeChanged()"><option value="town">Town / City</option><option value="state">State / Province</option><option value="country">Country</option></select></label><label>Area highlight color <input id="bmcTownColor" type="color" value="#26a4d8" oninput="bmcTownColor=this.value;bmcPaint()"></label><p class="bmc-map-help" id="bmcAreaHint">Click corners to outline a town or city. At least 3 points are required.</p><label id="bmcAreaNameLabel">Town / city name<input id="bmcTownName" placeholder="Enter a town or city name" maxlength="120"></label><button id="bmcAreaFinish" onclick="bmcFinishTown()">Finish town / city</button><button onclick="bmcTownDraft=[];bmcPaint()">Cancel shape</button></div><div id="bmcMarkerOptions" hidden><label>Marker name<input id="bmcMarkerName" placeholder="Enter marker name" maxlength="120"></label><p class="bmc-map-help" id="bmcMarkerPlaceHint">Click the map to choose a position, then finish below.</p><button onclick="bmcFinishMarker()">Finish marker</button><button onclick="bmcPendingPoint=null;bmcPaint()">Cancel marker</button></div><div id="bmcImageOptions" hidden><p class="bmc-map-help" id="bmcImageHelp">Select an imagery layer below, then drag on the map.</p></div></div>
@@ -447,6 +447,51 @@ document.addEventListener('keydown',e=>{
   else if(k==='y'||(k==='z'&&e.shiftKey)){e.preventDefault();bmcRedo();}
  }
 });
+
+// Export the actual map geometry, not the editor UI or its white background.
+async function bmcExportPNG(){
+ if(!bmcMap)return notice('Open a map first.');
+ const mode=document.getElementById('bmcPNGImagery')?.value||'normal';
+ const W=2400,H=2400,scale=W/100;
+ const canvas=document.createElement('canvas');canvas.width=W;canvas.height=H;
+ const ctx=canvas.getContext('2d');ctx.clearRect(0,0,W,H);
+ const load=src=>new Promise(resolve=>{const im=new Image();im.onload=()=>resolve(im);im.onerror=()=>resolve(null);im.src=src;});
+ try{
+  if(mode!=='blank')for(const l of bmcMap.layers||[]){
+   if(l.visible===false||!l.src)continue;
+   const im=await load(l.src);if(!im)continue;
+   const x=(+l.x||0)*scale,y=(+l.y||0)*scale,w=(+l.w||0)*scale,h=(+l.h||0)*scale;
+   const cx=+l.cropX||0,cy=+l.cropY||0,cw=+l.cropW||100,ch=+l.cropH||100;
+   if(w<=0||h<=0||cw<=0||ch<=0)continue;
+   ctx.save();ctx.translate(x+w/2,y+h/2);ctx.rotate((+l.angle||0)*Math.PI/180);ctx.beginPath();ctx.rect(-w/2,-h/2,w,h);ctx.clip();
+   if(mode==='grey')ctx.filter='grayscale(1)';
+   ctx.drawImage(im,-w/2-cx/cw*w,-h/2-cy/ch*h,w*100/cw,h*100/ch);
+   ctx.restore();
+  }
+  if(bmcVisibility.towns){
+   const towns=[...(bmcMap.towns||[])].sort((a,b)=>({country:0,state:1,town:2}[a.type||'town']??2)-({country:0,state:1,town:2}[b.type||'town']??2));
+   for(const t of towns){
+    const pts=t.points||[{x:t.x,y:t.y},{x:t.x+t.w,y:t.y},{x:t.x+t.w,y:t.y+t.h},{x:t.x,y:t.y+t.h}];if(!pts.length)continue;
+    const type=t.type||'town',style={country:[.08,.7,3.3],state:[.11,.55,2.7],town:[.14,.4,2.2]}[type]||[.14,.4,2.2];
+    ctx.beginPath();pts.forEach((p,i)=>i?ctx.lineTo(p.x*scale,p.y*scale):ctx.moveTo(p.x*scale,p.y*scale));ctx.closePath();
+    ctx.globalAlpha=style[0];ctx.fillStyle=t.color||'#6b9bcb';ctx.fill();ctx.globalAlpha=1;ctx.strokeStyle=t.color||'#6b9bcb';ctx.lineWidth=style[1]*scale;ctx.stroke();
+    const cx=pts.reduce((a,p)=>a+p.x,0)/pts.length*scale,cy=pts.reduce((a,p)=>a+p.y,0)/pts.length*scale;
+    ctx.font=`bold ${style[2]*scale}px sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.lineJoin='round';ctx.lineWidth=.65*scale;ctx.strokeStyle='#17212b';ctx.strokeText(t.name||'',cx,cy);ctx.fillStyle='#fff';ctx.fillText(t.name||'',cx,cy);
+   }
+  }
+  if(bmcVisibility.roads)for(const r of bmcMap.roads||[]){if(!r.points?.length)continue;
+   const st=bmcRoadStyle(r.type||'highway'),width=r.type?st.width:Math.max(.35,(r.width||4)/8),color=r.type?st.color:r.color||st.color;
+   const path=()=>{ctx.beginPath();r.points.forEach((p,i)=>i?ctx.lineTo(p.x*scale,p.y*scale):ctx.moveTo(p.x*scale,p.y*scale));};
+   ctx.lineCap='round';ctx.lineJoin='round';path();ctx.strokeStyle=st.outline==='none'?color:st.outline;ctx.lineWidth=(width+.25)*scale;ctx.stroke();
+   path();ctx.strokeStyle=color;ctx.lineWidth=width*scale;ctx.setLineDash(st.dash?st.dash.split(' ').map(Number).map(n=>n*scale):[]);ctx.stroke();ctx.setLineDash([]);
+  }
+  for(const m of bmcMap.markers||[]){if(m.src?!bmcVisibility.signs:!bmcVisibility.markers)continue;
+   const x=m.x*scale,y=m.y*scale;if(m.src){const im=await load(m.src);if(im)ctx.drawImage(im,x-1.5*scale,y-1.5*scale,3*scale,3*scale);}else{ctx.font=`${3*scale}px sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(m.emoji||'📍',x,y);}
+  }
+  canvas.toBlob(blob=>{if(!blob)return notice('Could not generate PNG.');const u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=(bmcMap.title||'bmc-map').replace(/[^a-z0-9-]/gi,'-')+'-'+mode+'.png';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),15000);notice('Transparent PNG exported.');},'image/png');
+ }catch(e){console.error('PNG export failed',e);notice('PNG export failed: '+e.message);}
+}
+
 function bmcPaint(refreshSide=true){const el=document.getElementById('bmcWorld');if(!el||!bmcMap)return;el.style.transform=`translate(${bmcPan.x}px,${bmcPan.y}px) scale(${bmcZoom})`;const layers=bmcMap.layers.filter(l=>l.visible!==false).map(l=>{const cx=l.cropX||0,cy=l.cropY||0,cw=l.cropW||100,ch=l.cropH||100;return `<div data-layer-id="${l.id}" style="position:absolute;left:${l.x}%;top:${l.y}%;width:${l.w}%;height:${l.h}%;overflow:hidden;transform:rotate(${l.angle||0}deg)"><img draggable="false" src="${l.src}" style="left:${-cx/cw*100}%;top:${-cy/ch*100}%;width:${10000/cw}%;height:${10000/ch}%;object-fit:fill"></div>`}).join('');
  const poly=pts=>pts.map(p=>`${p.x},${p.y}`).join(' ');
  const roads=bmcVisibility.roads?bmcMap.roads.map(r=>{const style=bmcRoadStyle(r.type||'highway'),w=r.type?style.width:Math.max(.35,(r.width||4)/8),c=r.type?style.color:r.color||style.color,dash=style.dash?`stroke-dasharray="${style.dash}"`:'';return `<g><polyline points="${poly(r.points)}" fill="none" stroke="${style.outline==='none'?c:style.outline}" stroke-width="${w+.25}" stroke-linejoin="round" stroke-linecap="round"/><polyline points="${poly(r.points)}" fill="none" stroke="${c}" stroke-width="${w}" ${dash} stroke-linejoin="round" stroke-linecap="round"/><title>${esc(r.name)}</title></g>`}).join(''):'';
