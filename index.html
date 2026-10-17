@@ -295,7 +295,7 @@ preview?.querySelectorAll('[data-block-index]').forEach(el=>{el.ondragstart=e=>e
 async function uploadBlockImage(i,input){const file=input.files?.[0];if(!file)return;try{const url=await uploadImage(file,'post','article');if(!articleBlocks[i])return;articleBlocks[i].url=url;drawBuilder()}catch(e){notice(e.message)}}
 function articleBuilder(x){articleBlocks=parseArticleBlocks(x?.content)||[{type:'text',text:x?.content||'',width:100,url:''}];return `<div class="builder"><h2>Visual block layout</h2><p class="muted">Drag blocks in the preview to rearrange them. Use the fields below to edit each block.</p><div id="blockPreview" class="builder-preview"></div><div class="block-add">${blockKinds.map(type=>`<button type="button" onclick="addBlock('${type}')">+ ${type}</button>`).join('')}</div><h2>Fill in your blocks</h2><div id="blockInputs"></div></div>`}
 
-async function editor(kind,id){if(!me||kind!=='discussions'&&!canWrite())return page('Permission required','You need Writer or Master access.');let x=id?(store[kind]||[]).find(x=>x.id===id):null;if(id&&!x){try{x=(await load(kind)).find(item=>item.id===id)}catch(err){notice(err.message);return}}if(id&&!x){page('Not found','Could not load the article to edit.');return}const isLoc=kind==='locations',isArt=kind==='articles';const options=['state','county','region','city','town','suburb','neighborhood','ward','district','island','other'];page((id?'Edit ':'Create ')+(isArt?'article':isLoc?'location':'discussion'),`<form id="editForm">${field('editTitle',isLoc?'Location name':'Title',x?.title||x?.name)}${isArt?field('editCategory','Category',x?.category||'General'):''}${isLoc?`<label for="editType">Location type</label><select id="editType">${options.map(t=>`<option value="${t}" ${x?.location_type===t?'selected':''}>${t}</option>`).join('')}</select>`:''}${isArt?articleBuilder(x):field('editBody',isLoc?'Description':'Content',x?.content||x?.description,'textarea')}${!isLoc&&!isArt?mediaPicker('editImage'):''}${x?.images?.length?mediaMarkup(x.images):''}<div class="actions"><button class="primary">Save</button>${btn('Cancel',`go('${kind}')`)}</div></form>`);if(isArt)drawBuilder();const form=$('#editForm');if(!form)return;form.onsubmit=async e=>{e.preventDefault();const title=$('#editTitle')?.value,body=isArt?BLOCK_PREFIX+JSON.stringify(articleBlocks):$('#editBody')?.value;try{const images=isLoc||isArt?x?.images||[]:await collectImages('editImage','post','discussion',x?.images);await api('save',{kind,id,title,name:title,content:body,description:body,category:$('#editCategory')?.value,location_type:$('#editType')?.value,images});await directory(kind)}catch(err){notice(err.message)}}}
+async function editor(kind,id){if(!me||kind!=='discussions'&&!canWrite())return page('Permission required','You need Writer or Master access.');let x=id?(store[kind]||[]).find(x=>x.id===id):null;if(id&&!x){try{x=(await load(kind)).find(item=>item.id===id)}catch(err){notice(err.message);return}}if(id&&!x){page('Not found','Could not load the article to edit.');return}const isLoc=kind==='locations',isArt=kind==='articles',isRich=isArt||(kind==='discussions'&&!!parseArticleBlocks(x?.content));const options=['state','county','region','city','town','suburb','neighborhood','ward','district','island','other'];page((id?'Edit ':'Create ')+(isArt?'article':isLoc?'location':'discussion'),`<form id="editForm">${field('editTitle',isLoc?'Location name':'Title',x?.title||x?.name)}${isArt?field('editCategory','Category',x?.category||'General'):''}${isLoc?`<label for="editType">Location type</label><select id="editType">${options.map(t=>`<option value="${t}" ${x?.location_type===t?'selected':''}>${t}</option>`).join('')}</select>`:''}${isRich?articleBuilder(x):field('editBody',isLoc?'Description':'Content',x?.content||x?.description,'textarea')}${!isLoc&&!isArt?mediaPicker('editImage'):''}${x?.images?.length?mediaMarkup(x.images):''}<div class="actions"><button class="primary">Save</button>${btn('Cancel',`go('${kind}')`)}</div></form>`);if(isRich)drawBuilder();const form=$('#editForm');if(!form)return;form.onsubmit=async e=>{e.preventDefault();const title=$('#editTitle')?.value,body=isRich?BLOCK_PREFIX+JSON.stringify(articleBlocks):$('#editBody')?.value;try{const images=isLoc||isArt?x?.images||[]:await collectImages('editImage','post','discussion',x?.images);await api('save',{kind,id,title,name:title,content:body,description:body,category:$('#editCategory')?.value,location_type:$('#editType')?.value,images});await directory(kind)}catch(err){notice(err.message)}}}
 async function removeItem(kind,id){if(!confirm('Delete this item?'))return;try{await api('delete',{kind,id});if(kind==='comments'){go(route)}else await directory(kind)}catch(e){alert(e.message)}}
 async function history(id){page('Article revision history','<div id="revs">Loading…</div>');try{const items=await load('revisions',{article_id:id});$('#revs').innerHTML=items.map(x=>`<details class="item"><summary>${date(x.created_at)} — ${esc(x.title)}</summary><div class="article">${esc(x.content)}</div></details>`).join('')||'<p>No revisions yet.</p>'}catch(e){notice(e.message)}}
 async function chat(){if(!me){page('Live Chat','<p>Log in to join the community chat.</p>'+btn('Log in',"go('account')"));return}page('Live Chat','<div id="channels" class="channelBar"></div><div id="chatBox" class="chatBox">Loading…</div><form id="chatForm"><label for="chatText">Message</label><input id="chatText" maxlength="2000" required placeholder="Write a message…"><div class="actions"><button class="primary">Send</button>'+btn('Refresh','refreshChat()')+'</div></form><p class="muted">Use Refresh to load new messages.</p>');try{const channels=await load('channels');const validChannels=channels.filter(c=>c&&/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(c.id||''));if(!validChannels.length){$('#channels').textContent='No valid chat channels found. Ask an admin to run the chat setup SQL.';$('#chatBox').textContent='Chat unavailable until channels are configured.';$('#chatForm').style.display='none';return}if(!validChannels.some(c=>c.id===currentChannel))currentChannel=validChannels[0].id;$('#channels').innerHTML=validChannels.map(c=>`<button onclick="currentChannel='${c.id}';chat()" class="${currentChannel===c.id?'primary':''}"># ${esc(c.name)}</button>`).join('');await refreshChat();if(chatTimer)clearInterval(chatTimer);chatTimer=setInterval(()=>{if(route==='chat'&&document.visibilityState==='visible')refreshChat()},4500);$('#chatForm').onsubmit=async e=>{e.preventDefault();try{await api('message',{channel_id:currentChannel,body:$('#chatText').value});$('#chatText').value='';await refreshChat()}catch(err){notice(err.message)}}}catch(e){notice(e.message)}}
@@ -709,6 +709,7 @@ async function bmcImagesPage(){
  <label>Title <input id="bmcDbTitle" maxlength="120" placeholder="Image title"></label>
  <label>Category <select id="bmcDbCategory">${bmcDbCategories.filter(([v])=>v!=='all').map(([v,n])=>`<option value="${v}">${n}</option>`).join('')}</select></label>
  <label>Description (optional) <input id="bmcDbDescription" maxlength="1000" placeholder="Short description"></label>
+ <label>Roblox image/decal ID (optional) <input id="bmcDbRobloxId" inputmode="numeric" maxlength="20" placeholder="e.g. 1234567890"></label>
  <label>PNG, JPG, or WebP <input id="bmcDbFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label>
  <button class="primary" onclick="bmcDbPublishFile()">Publish image</button></div>
  <div id="bmcDbResults" class="bmc-db-grid">Loading…</div>`);
@@ -720,20 +721,28 @@ async function bmcDbRefresh(){
  out.textContent='Loading images…';
  try{
   const r=await api('database_images',{category});
-  out.innerHTML=r.items.length?r.items.map(x=>`<div class="bmc-db-card"><img loading="lazy" src="${esc(x.image_url)}" alt="${esc(x.title)}" onclick="bmcDbView(this.src)"><strong>${esc(x.title)}</strong><small>${esc(bmcDbCategories.find(([v])=>v===x.category)?.[1]||x.category)}</small><p>${esc(x.description||'')}</p><a href="${esc(x.image_url)}" target="_blank" rel="noopener">Open original</a></div>`).join(''):'<p>No images published in this category yet.</p>';
+  out.innerHTML=r.items.length?r.items.map(x=>`<div class="bmc-db-card"><img loading="lazy" src="${esc(x.image_url)}" alt="${esc(x.title)}" onclick="bmcDbView(this.src)"><strong>${esc(x.title)}</strong><small>${esc(bmcDbCategories.find(([v])=>v===x.category)?.[1]||x.category)}</small><p>${esc(x.description||'')}</p>${x.roblox_id?`<small>Roblox ID: <code>${esc(String(x.roblox_id))}</code> <button onclick="navigator.clipboard.writeText('${esc(String(x.roblox_id))}')">Copy ID</button></small>`:''}${me&&['master','writer'].includes(me.role)?`<button onclick="bmcDbEditRobloxId('${esc(x.id)}','${esc(String(x.roblox_id||''))}')">${x.roblox_id?'Edit Roblox ID':'Add Roblox ID'}</button>`:''}<a href="${esc(x.image_url)}" target="_blank" rel="noopener">Open original</a></div>`).join(''):'<p>No images published in this category yet.</p>';
  }catch(e){out.textContent=e.message}
 }
 function bmcDbView(src){
  const el=document.createElement('div');el.className='bmc-db-viewer';el.onclick=()=>el.remove();
  const img=document.createElement('img');img.src=src;img.alt='Full image';el.append(img);document.body.append(el);
 }
-async function bmcDbUploadBlob(blob,title,category,description=''){
+async function bmcDbEditRobloxId(id,current){
+ const entered=prompt('Roblox image/decal asset ID (leave empty to remove):',current||'');
+ if(entered===null)return;
+ const roblox_id=entered.trim().replace(/^rbxassetid:\/\//i,'');
+ if(roblox_id&&!/^\d{1,20}$/.test(roblox_id)){notice('Enter a numeric Roblox asset ID.');return;}
+ try{await api('database_image_roblox_id',{id,roblox_id});notice('Roblox ID saved.',false);await bmcDbRefresh();}
+ catch(e){notice(e.message)}
+}
+async function bmcDbUploadBlob(blob,title,category,description='',roblox_id=''){
  if(!me||!['writer','master'].includes(me.role))throw Error('Writer permission required to publish images.');
  if(!blob||blob.size>10_000_000)throw Error('Image must be 10 MB or less.');
  const mime=blob.type||'image/png';
  const base64=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result).split(',')[1]);r.onerror=reject;r.readAsDataURL(blob)});
  const uploaded=await api('upload',{scope:'post',mime,data:base64});
- return await api('database_image_publish',{title,category,description,image_url:uploaded.url});
+ return await api('database_image_publish',{title,category,description,image_url:uploaded.url,roblox_id});
 }
 async function bmcDbPublishFile(){
  try{
@@ -742,7 +751,9 @@ async function bmcDbPublishFile(){
   const title=document.getElementById('bmcDbTitle').value.trim()||file.name;
   const category=document.getElementById('bmcDbCategory').value;
   const description=document.getElementById('bmcDbDescription').value.trim();
-  await bmcDbUploadBlob(file,title,category,description);
+  const roblox_id=document.getElementById('bmcDbRobloxId').value.trim();
+  if(roblox_id&&!/^\d{1,20}$/.test(roblox_id))throw Error('Roblox ID must contain only digits.');
+  await bmcDbUploadBlob(file,title,category,description,roblox_id);
   notice('Image published to the database.',false);bmcDbRefresh();
  }catch(e){notice(e.message)}
 }
